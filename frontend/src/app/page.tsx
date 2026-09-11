@@ -16,6 +16,7 @@ import {
   PhoneCall,
   PhoneOff,
   Mic,
+  Square,
   Shield,
   Zap,
   Users,
@@ -126,6 +127,22 @@ export default function DashboardPage() {
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
+  // Microphone & Speech-to-Text State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const recognitionRef = useRef<any>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const transcriptRef = useRef<string>("");
+  const isRecordingRef = useRef<boolean>(false);
+
+  // SMS Voice Dictation State
+  const [isSmsDictating, setIsSmsDictating] = useState(false);
+  const smsRecognitionRef = useRef<any>(null);
+
   // Browser Geolocation State
   const [locatingUser, setLocatingUser] = useState(false);
   const [gpsDetected, setGpsDetected] = useState<{ lat: number; lng: number; address: string } | null>(null);
@@ -194,16 +211,37 @@ export default function DashboardPage() {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, voiceTranscript]);
 
-  // Voice Call Timer
+  // Voice Call Timer & Call State lifecycle
   useEffect(() => {
     let timerId: any;
     if (callState === "connected") {
       timerId = setInterval(() => setCallTimer((prev) => prev + 1), 1000);
     } else {
       setCallTimer(0);
+      if (isRecordingRef.current) {
+        stopRecording(false);
+      }
     }
     return () => clearInterval(timerId);
   }, [callState]);
+
+  // Cleanup microphone and audio listeners on component unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+      if (smsRecognitionRef.current) {
+        try { smsRecognitionRef.current.stop(); } catch (e) {}
+      }
+    };
+  }, []);
 
   // Handle Send Message (SMS Simulator)
   const handleSendMessage = async (textToSend?: string) => {
@@ -351,8 +389,260 @@ export default function DashboardPage() {
     ]);
   };
 
+  // Stop & Clean up voice recording
+  const stopRecording = async (shouldSend: boolean = true) => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    setInterimTranscript("");
+
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    // Stop Web Speech API Recognition
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      recognitionRef.current = null;
+    }
+
+    // Stop MediaRecorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
+    }
+
+    // Release microphone hardware stream tracks so browser mic indicator turns off
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+
+    if (!shouldSend) {
+      audioChunksRef.current = [];
+      return;
+    }
+
+    // 1. Check if speech recognition captured text
+    let textToSend = (transcriptRef.current || voiceInput).trim();
+
+    // 2. If Web Speech was empty/unsupported but we have audio chunks, transcribe via Groq Whisper backend
+    if (!textToSend && audioChunksRef.current.length > 0) {
+      try {
+        const mimeType = mediaRecorderRef.current?.mimeType || "audio/webm";
+        const recordedBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        if (recordedBlob.size > 2000) {
+          setVoiceLoading(true);
+          const formData = new FormData();
+          formData.append("file", recordedBlob, "speech.webm");
+
+          const res = await fetch("/voice/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.text && data.text.trim()) {
+              textToSend = data.text.trim();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Audio upload transcription error:", err);
+      } finally {
+        setVoiceLoading(false);
+      }
+    }
+
+    audioChunksRef.current = [];
+
+    if (textToSend) {
+      setVoiceInput(textToSend);
+      handleVoiceTurn(textToSend);
+    } else {
+      setRecordingError("No speech detected. Please speak closer to your microphone or type your message.");
+      setTimeout(() => setRecordingError(null), 5000);
+    }
+  };
+
+  // Start microphone listening & speech capture
+  const startRecording = async () => {
+    setRecordingError(null);
+    setInterimTranscript("");
+    transcriptRef.current = "";
+    audioChunksRef.current = [];
+
+    // Interrupt AI if currently speaking via TTS
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+
+    // 1. Request microphone hardware stream
+    let stream: MediaStream | null = null;
+    try {
+      if (typeof navigator !== "undefined" && navigator?.mediaDevices?.getUserMedia) {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+      }
+    } catch (err: any) {
+      console.warn("Microphone getUserMedia error:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setRecordingError(
+          "Microphone permission blocked. Please allow microphone access in your browser address bar."
+        );
+        return;
+      }
+    }
+
+    // 2. Start MediaRecorder as backup for Groq Whisper
+    if (stream && typeof MediaRecorder !== "undefined") {
+      try {
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/ogg")
+          ? "audio/ogg"
+          : "";
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+          }
+        };
+        recorder.start(250);
+      } catch (e) {
+        console.warn("MediaRecorder start error:", e);
+      }
+    }
+
+    // 3. Start Web Speech API SpeechRecognition
+    const SpeechRecognitionClass =
+      typeof window !== "undefined"
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
+
+    if (SpeechRecognitionClass) {
+      try {
+        const recognition = new SpeechRecognitionClass();
+        recognition.continuous = true; // Crucial: prevents early 1-second auto cutoff!
+        recognition.interimResults = true;
+        recognition.lang = "en-IN";
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = (event: any) => {
+          let interim = "";
+          let final = transcriptRef.current || "";
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const piece = event.results[i][0]?.transcript || "";
+            if (event.results[i].isFinal) {
+              final = (final ? final + " " : "") + piece.trim();
+            } else {
+              interim += piece;
+            }
+          }
+
+          transcriptRef.current = final;
+          setInterimTranscript(interim);
+          const fullText = (final + (interim ? " " + interim : "")).trim();
+          if (fullText) {
+            setVoiceInput(fullText);
+          }
+
+          // Auto-send silence timer: if user speaks and pauses for 3.5s
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = setTimeout(() => {
+            if (isRecordingRef.current && (transcriptRef.current || fullText)) {
+              stopRecording(true);
+            }
+          }, 3500);
+        };
+
+        recognition.onerror = (event: any) => {
+          console.warn("Speech recognition error:", event.error);
+          if (event.error === "not-allowed") {
+            setRecordingError("Microphone permission blocked. Please allow mic in browser settings.");
+          }
+        };
+
+        recognition.onend = () => {
+          // Keep active if user has not clicked stop
+          if (isRecordingRef.current) {
+            try {
+              recognition.start();
+            } catch (e) {}
+          }
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch (e) {
+        console.warn("SpeechRecognition init error:", e);
+      }
+    }
+
+    isRecordingRef.current = true;
+    setIsRecording(true);
+  };
+
+  // SMS Simulator Voice Dictation
+  const toggleSmsDictation = () => {
+    const SpeechRecognitionClass =
+      typeof window !== "undefined"
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
+
+    if (!SpeechRecognitionClass) {
+      alert("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    if (isSmsDictating) {
+      if (smsRecognitionRef.current) {
+        try { smsRecognitionRef.current.stop(); } catch (e) {}
+      }
+      setIsSmsDictating(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionClass();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-IN";
+
+      recognition.onresult = (e: any) => {
+        let text = "";
+        for (let i = 0; i < e.results.length; ++i) {
+          text += e.results[i][0]?.transcript || "";
+        }
+        if (text) setMessageInput(text);
+      };
+
+      recognition.onerror = () => setIsSmsDictating(false);
+      recognition.onend = () => setIsSmsDictating(false);
+
+      recognition.start();
+      smsRecognitionRef.current = recognition;
+      setIsSmsDictating(true);
+    } catch (e) {
+      console.warn("Could not start SMS dictation:", e);
+      setIsSmsDictating(false);
+    }
+  };
+
   // Handle Voice Turn
   const handleVoiceTurn = async (spokenText?: string) => {
+    if (isRecordingRef.current) {
+      stopRecording(false);
+    }
     const text = spokenText || voiceInput;
     if (!text.trim() || voiceLoading) return;
 
@@ -515,8 +805,14 @@ export default function DashboardPage() {
 
   // Start Voice Call
   const startCall = () => {
+    if (isRecordingRef.current) {
+      stopRecording(false);
+    }
     setCallState("ringing");
     setVoiceTranscript([]);
+    setVoiceInput("");
+    setRecordingError(null);
+    setInterimTranscript("");
     setTimeout(() => {
       setCallState("connected");
       const greeting = "Welcome to Acme Ride Booking. Where would you like to travel today?";
@@ -533,6 +829,9 @@ export default function DashboardPage() {
 
   // End Voice Call
   const endCall = () => {
+    if (isRecordingRef.current) {
+      stopRecording(false);
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -1938,6 +2237,24 @@ export default function DashboardPage() {
                     <Navigation size={15} style={{ animation: locatingUser ? "spin 1s linear infinite" : "none" }} />
                     {locatingUser ? "Locating..." : "📍 GPS"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={toggleSmsDictation}
+                    className={`btn ${isSmsDictating ? "btn-recording" : "btn-secondary"}`}
+                    title={isSmsDictating ? "Listening... click to stop dictating" : "Dictate message using microphone"}
+                    style={{
+                      padding: "0 12px",
+                      color: isSmsDictating ? "#ffffff" : "#94a3b8",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "0.85rem",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <Mic size={15} />
+                    {isSmsDictating ? "Listening..." : "Mic"}
+                  </button>
                   <button type="submit" className="btn btn-primary" disabled={chatLoading}>
                     <Send size={16} />
                     Send
@@ -2039,33 +2356,149 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                    {/* Live Speaking Indicator */}
+                    {/* Dynamic Call Audio & Microphone Status Indicator */}
                     <div
                       style={{
-                        background: "rgba(0,0,0,0.3)",
-                        padding: "12px 18px",
+                        background: isRecording
+                          ? "rgba(220, 38, 38, 0.12)"
+                          : isSpeaking
+                          ? "rgba(16, 185, 129, 0.1)"
+                          : "rgba(0,0,0,0.3)",
+                        border: isRecording
+                          ? "1px solid rgba(239, 68, 68, 0.35)"
+                          : isSpeaking
+                          ? "1px solid rgba(16, 185, 129, 0.25)"
+                          : "1px solid var(--border-color)",
+                        padding: "10px 16px",
                         borderRadius: "10px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
-                        marginBottom: "16px",
+                        marginBottom: "14px",
+                        transition: "all 0.2s ease",
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <Volume2 size={20} color={isSpeaking ? "#34d399" : "#64748b"} />
-                        <span style={{ fontSize: "0.85rem", color: isSpeaking ? "#34d399" : "var(--text-dim)" }}>
-                          {isSpeaking ? "AI Agent is speaking (TTS active)..." : "Listening for caller speech..."}
-                        </span>
+                        {isRecording ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <div
+                              style={{
+                                width: "10px",
+                                height: "10px",
+                                borderRadius: "50%",
+                                background: "#ef4444",
+                                animation: "recording-pulse 1.2s infinite ease-out",
+                              }}
+                            />
+                            <Mic size={18} color="#f87171" />
+                            <span style={{ fontSize: "0.85rem", color: "#fca5a5", fontWeight: "600" }}>
+                              Microphone Active • Listening to your voice... Speak now!
+                            </span>
+                          </div>
+                        ) : isSpeaking ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <Volume2 size={18} color="#34d399" />
+                            <span style={{ fontSize: "0.85rem", color: "#34d399", fontWeight: "500" }}>
+                              AI Agent Speaking (TTS active)... Click Speak to interrupt.
+                            </span>
+                          </div>
+                        ) : voiceLoading ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <RefreshCw size={16} color="#fbbf24" style={{ animation: "spin 1s linear infinite" }} />
+                            <span style={{ fontSize: "0.85rem", color: "#fbbf24" }}>
+                              Transcribing audio & orchestrating dispatch MCP tools...
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <Mic size={17} color="#94a3b8" />
+                            <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                              Microphone Ready • Click <strong>Speak</strong> to talk or type your reply below.
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "30px" }}>
-                        <div className="wave-bar" />
-                        <div className="wave-bar" />
-                        <div className="wave-bar" />
-                        <div className="wave-bar" />
-                        <div className="wave-bar" />
+                      <div style={{ display: "flex", gap: "4px", alignItems: "center", height: "26px" }}>
+                        <div className={isRecording ? "wave-bar wave-bar-recording" : "wave-bar"} style={{ opacity: isSpeaking || isRecording ? 1 : 0.25 }} />
+                        <div className={isRecording ? "wave-bar wave-bar-recording" : "wave-bar"} style={{ opacity: isSpeaking || isRecording ? 1 : 0.25 }} />
+                        <div className={isRecording ? "wave-bar wave-bar-recording" : "wave-bar"} style={{ opacity: isSpeaking || isRecording ? 1 : 0.25 }} />
+                        <div className={isRecording ? "wave-bar wave-bar-recording" : "wave-bar"} style={{ opacity: isSpeaking || isRecording ? 1 : 0.25 }} />
+                        <div className={isRecording ? "wave-bar wave-bar-recording" : "wave-bar"} style={{ opacity: isSpeaking || isRecording ? 1 : 0.25 }} />
                       </div>
                     </div>
+
+                    {/* Live Hearing Banner when recording */}
+                    {isRecording && (
+                      <div
+                        style={{
+                          padding: "10px 14px",
+                          background: "rgba(239, 68, 68, 0.08)",
+                          border: "1px dashed rgba(239, 68, 68, 0.35)",
+                          borderRadius: "8px",
+                          fontSize: "0.85rem",
+                          color: "#fca5a5",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                          marginBottom: "12px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+                          <span style={{ fontWeight: "600", color: "#ef4444" }}>Hearing:</span>
+                          <span style={{ fontStyle: "italic", color: "#f8fafc" }}>
+                            &ldquo;{interimTranscript || voiceInput || "Listening for speech..."}&rdquo;
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => stopRecording(true)}
+                          className="btn btn-recording"
+                          style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                        >
+                          <Square size={12} fill="#ffffff" />
+                          Done Speaking
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Microphone / Recording Error Banner */}
+                    {recordingError && (
+                      <div
+                        style={{
+                          padding: "10px 14px",
+                          background: "rgba(239, 68, 68, 0.15)",
+                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                          borderRadius: "8px",
+                          color: "#fca5a5",
+                          fontSize: "0.82rem",
+                          marginBottom: "12px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <AlertTriangle size={16} color="#f87171" />
+                          <span>{recordingError}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRecordingError(null)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#fca5a5",
+                            cursor: "pointer",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
 
                     {/* Spoken Transcript Feed */}
                     <div
@@ -2117,59 +2550,132 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Spoken Response Input */}
-                    <div style={{ display: "flex", gap: "10px" }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <input
                         type="text"
                         value={voiceInput}
                         onChange={(e) => setVoiceInput(e.target.value)}
-                        placeholder="Speak or type what you would say on the call..."
+                        placeholder={isRecording ? "Listening to your voice..." : "Speak into mic or type what you would say..."}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") handleVoiceTurn();
+                          if (e.key === "Enter" && !voiceLoading) {
+                            if (isRecording) {
+                              stopRecording(true);
+                            } else {
+                              handleVoiceTurn();
+                            }
+                          }
                         }}
                         style={{
                           flex: 1,
                           padding: "12px 16px",
                           background: "var(--bg-input)",
-                          border: "1px solid var(--border-color)",
+                          border: isRecording ? "1px solid rgba(239, 68, 68, 0.5)" : "1px solid var(--border-color)",
                           borderRadius: "8px",
                           color: "#f8fafc",
                           fontSize: "0.9rem",
                           outline: "none",
+                          transition: "border-color 0.2s ease",
                         }}
                       />
+
                       <button
                         type="button"
                         onClick={handleUseCurrentLocation}
-                        disabled={locatingUser || voiceLoading}
+                        disabled={locatingUser || voiceLoading || isRecording}
                         className="btn btn-secondary"
                         title="Share device GPS location on the voice call"
                         style={{
-                          padding: "0 14px",
-                          background: "rgba(56, 189, 248, 0.12)",
-                          border: "1px solid rgba(56, 189, 248, 0.35)",
+                          padding: "0 12px",
+                          background: "rgba(56, 189, 248, 0.1)",
+                          border: "1px solid rgba(56, 189, 248, 0.3)",
                           color: "#38bdf8",
                           display: "flex",
                           alignItems: "center",
                           gap: "6px",
-                          fontSize: "0.85rem",
+                          fontSize: "0.82rem",
                           whiteSpace: "nowrap",
+                          height: "44px",
                         }}
                       >
-                        <Navigation size={15} style={{ animation: locatingUser ? "spin 1s linear infinite" : "none" }} />
+                        <Navigation size={14} style={{ animation: locatingUser ? "spin 1s linear infinite" : "none" }} />
                         {locatingUser ? "Locating..." : "📍 GPS"}
                       </button>
+
+                      {/* Microphone Speak / Recording Button */}
+                      {isRecording ? (
+                        <button
+                          type="button"
+                          onClick={() => stopRecording(true)}
+                          className="btn btn-recording"
+                          title="Click to stop recording and send speech"
+                          style={{
+                            height: "44px",
+                            padding: "0 16px",
+                            fontSize: "0.85rem",
+                            fontWeight: "600",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <Square size={14} fill="#ffffff" />
+                          Done Speaking
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          className="btn btn-primary"
+                          disabled={voiceLoading}
+                          title="Click to activate microphone and speak"
+                          style={{
+                            height: "44px",
+                            padding: "0 16px",
+                            fontSize: "0.85rem",
+                            whiteSpace: "nowrap",
+                            background: "#2563eb",
+                          }}
+                        >
+                          <Mic size={16} />
+                          Speak
+                        </button>
+                      )}
+
+                      {/* Send Button for typed / edited input */}
                       <button
-                        onClick={() => handleVoiceTurn()}
-                        className="btn btn-primary"
-                        disabled={voiceLoading}
+                        type="button"
+                        onClick={() => {
+                          if (isRecording) {
+                            stopRecording(true);
+                          } else {
+                            handleVoiceTurn();
+                          }
+                        }}
+                        className="btn btn-secondary"
+                        disabled={voiceLoading || (!voiceInput.trim() && !isRecording)}
+                        title="Send response"
+                        style={{
+                          height: "44px",
+                          padding: "0 14px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
                       >
-                        <Mic size={16} />
-                        Speak
+                        <Send size={15} />
                       </button>
+
+                      {/* Hang Up Button */}
                       <button
+                        type="button"
                         onClick={endCall}
                         className="btn"
-                        style={{ background: "rgba(244, 63, 94, 0.2)", color: "#fb7185", border: "1px solid rgba(244, 63, 94, 0.3)" }}
+                        style={{
+                          height: "44px",
+                          background: "rgba(244, 63, 94, 0.15)",
+                          color: "#fb7185",
+                          border: "1px solid rgba(244, 63, 94, 0.3)",
+                          padding: "0 14px",
+                          whiteSpace: "nowrap",
+                        }}
                       >
                         <PhoneOff size={16} />
                         Hang Up

@@ -16,17 +16,24 @@ class SimulateCallRequest(BaseModel):
     phone_number: Optional[str] = "+14155552671"
     user_text: str
 
-def transcribe_audio_with_groq(audio_bytes: bytes, filename: str = "audio.wav") -> str:
+def transcribe_audio_with_groq(audio_bytes: bytes, filename: str = "speech.webm") -> str:
     """Uses Groq API Whisper model (whisper-large-v3) to transcribe spoken audio."""
+    if not audio_bytes or len(audio_bytes) < 500:
+        return ""
+
     if not settings.GROQ_API_KEY or not settings.GROQ_API_KEY.strip():
         logger.warning("GROQ_API_KEY not configured. Falling back to direct text.")
         return ""
+
+    # Ensure valid audio extension recognized by Groq Whisper
+    valid_exts = (".webm", ".wav", ".ogg", ".mp3", ".m4a", ".mp4", ".flac", ".mpeg")
+    safe_filename = filename if filename and any(filename.lower().endswith(ext) for ext in valid_exts) else "speech.webm"
 
     try:
         from groq import Groq
         client = Groq(api_key=settings.GROQ_API_KEY)
         buffer = io.BytesIO(audio_bytes)
-        buffer.name = filename
+        buffer.name = safe_filename
 
         transcription = client.audio.transcriptions.create(
             model=settings.GROQ_WHISPER_MODEL,
