@@ -52,7 +52,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "check_driver_availability",
-        "description": "Queries available drivers filtered by vehicle type (car, bike, or auto) and calculates the nearest available driver to the pickup coordinates.",
+        "description": "Queries available drivers filtered by vehicle type (car, bike, or auto) and calculates the nearest available driver to the pickup coordinates. Can also check and book a specific driver if driver_id or driver_name is provided.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -68,6 +68,14 @@ TOOL_DEFINITIONS = [
                 "pickup_lng": {
                     "type": "number",
                     "description": "Longitude of the pickup location.",
+                },
+                "driver_id": {
+                    "type": "integer",
+                    "description": "Optional driver ID if a specific driver was requested or previously matched.",
+                },
+                "driver_name": {
+                    "type": "string",
+                    "description": "Optional driver name if the rider specifically asked for a named driver.",
                 },
                 "exclude_driver_ids": {
                     "type": "array",

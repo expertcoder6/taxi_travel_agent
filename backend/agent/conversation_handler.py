@@ -69,6 +69,7 @@ class ConversationHandler:
             destination_address=state.destination,
             passenger_count=state.passenger_count or 1,
             scheduled_time=state.scheduled_time or "Immediate",
+            requested_driver=state.requested_driver,
         )
         db.add(ride)
         db.commit()
@@ -84,7 +85,7 @@ class ConversationHandler:
         user_text: str,
     ) -> None:
         """
-        Extracts pickup, destination, vehicle_type, and travel intent with high accuracy.
+        Extracts pickup, destination, vehicle_type, requested driver, and travel intent with high accuracy.
         Handles phrases like 'where i have to reach', 'reach Koramangala', 'pickup from', 'drop at', etc.
         """
         text = user_text.lower().strip()
@@ -103,7 +104,7 @@ class ConversationHandler:
         # Did the assistant explicitly ask for destination or pickup?
         asking_for_dest = bool(
             re.search(
-                r"\b(where\s+is\s+your\s+destination|where\s+should\s+we\s+drop\s+you|where\s+to\s+drop|destination|drop\s+off)\b",
+                r"\b(where\s+(?:is|to|should)\s+(?:your\s+)?destination|where\s+(?:should|can)\s+we\s+drop\s+you|where\s+to\s+drop|what\s+is\s+your\s+destination|provide\s+(?:your\s+)?destination|tell\s+me\s+(?:your\s+)?destination|specify\s+(?:your\s+)?destination|what\s+destination)\b",
                 last_assistant_msg,
             )
         )
@@ -111,7 +112,7 @@ class ConversationHandler:
             not asking_for_dest
             and bool(
                 re.search(
-                    r"\b(where\s+would\s+you\s+like\s+to\s+be\s+picked\s+up|where\s+is\s+your\s+pickup|pickup\s+location)\b",
+                    r"\b(where\s+(?:is|would\s+you\s+like\s+to\s+be|to)\s+(?:your\s+)?pickup|where\s+should\s+we\s+pick\s+you\s+up|what\s+is\s+your\s+pickup|provide\s+(?:your\s+)?pickup|tell\s+me\s+(?:your\s+)?pickup|specify\s+(?:your\s+)?pickup)\b",
                     last_assistant_msg,
                 )
             )
@@ -136,8 +137,6 @@ class ConversationHandler:
             state.pickup = settings.COMPANY_LOCATION_NAME
 
         # 4. Explicit Destination patterns
-        # Matches: "where i have to reach is X", "i have to reach X", "have to reach X", "reach at X", "reach X"
-        # Matches: "drop me at X", "drop at X", "drop to X", "destination is X", "destination X"
         dest_match = re.search(
             r"\b(?:where\s+i\s+have\s+to\s+reach(?:\s+is|\s+at|\s+to)?|i\s+have\s+to\s+reach(?:\s+at|\s+to)?|have\s+to\s+reach(?:\s+at|\s+to)?|want\s+to\s+reach(?:\s+at|\s+to)?|reach\s+at|reach\s+to|reach|drop\s+off\s+at|drop\s+me\s+off\s+at|drop\s+me\s+at|drop\s+me\s+to|drop\s+at|drop\s+to|destination\s+is|destination\s*:\s*|destination)\s+([a-zA-Z0-9\s,\-\.]+?)(?:\s+(?:from|pickup|by|in|with|and\s+(?:book|i\s+want|vehicle|car|bike|auto))\s+|$)",
             text,
@@ -164,23 +163,35 @@ class ConversationHandler:
         if from_match and not state.pickup:
             state.pickup = " ".join(w.capitalize() for w in from_match.group(1).strip().split())
 
-        is_generic_intent = bool(re.search(r"\b(need|want|like|trying)\s+to\s+(book|take|get|go|travel|reserve|catch|order|request)\b", text))
-        if not is_generic_intent and not state.destination:
+        if not state.destination:
             to_match = re.search(
-                r"\bto\s+(?!(?:book|take|get|go|travel|reserve|catch|order|request)\b)([a-zA-Z0-9\s,\-\.]+?)(?:\s+(?:from|by|in|with)\s+|$)",
+                r"\bto\s+(?!(?:book|take|get|go|travel|reserve|catch|order|request|reach)\b)([a-zA-Z0-9\s,\-\.]+?)(?:\s+(?:from|by|in|with)\s+|$)",
                 text,
             )
             if to_match:
-                state.destination = " ".join(w.capitalize() for w in to_match.group(1).strip().split())
+                to_val = to_match.group(1).strip()
+                to_val = re.sub(r"\s+and\s+(?:book|i\s+want|vehicle|car|bike|auto).*$", "", to_val, flags=re.IGNORECASE)
+                if to_val and to_val not in ("car", "bike", "auto"):
+                    state.destination = " ".join(w.capitalize() for w in to_val.split())
 
-        # 7. Contextual single-slot response
+        # 7. Contextual single-slot response & confirmation detection
         clean_ans = user_text.strip()
         clean_stripped = re.sub(r"^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening))[,\s!]*", "", clean_ans.lower()).strip()
+        is_confirmation = bool(
+            re.search(
+                r"\b(?:yes|yeah|yep|yup|sure|confirm|confirmed|proceed|go ahead|book it|book now|book the ride|please book|correct|fine|ok|okay|do it|right|sounds good)\b",
+                clean_stripped,
+                re.IGNORECASE,
+            )
+            and not re.search(r"\b(?:no|don't|dont|cancel|stop|change|different|reject|another)\b", clean_stripped, re.IGNORECASE)
+        )
         is_greeting_or_intent = (
             not clean_stripped
+            or is_confirmation
             or bool(re.search(r"^(?:i\s+)?(?:need|want|would\s+like)\s+(?:to\s+)?(?:book|get|take|order)?\s*(?:a\s+)?ride[s\s\.\?!]*$", clean_stripped))
             or clean_stripped in ("book a ride", "need a ride", "car", "bike", "auto")
         )
+
         # 8. Passenger count extraction
         pass_match = re.search(r"\b(\d+)\s*(?:passengers?|people|persons?|riders?|seats?)\b", text)
         if pass_match:
@@ -211,12 +222,62 @@ class ConversationHandler:
         elif re.search(r"\b(right\s+now|immediately|asap|now|urgent)\b", text):
             state.scheduled_time = "Immediate"
 
+        # 10. Requested driver extraction
+        drv_match = re.search(
+            r"\b(?:with\s+driver|book\s+driver|driver|request\s+driver|call\s+driver|assign\s+driver)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?|\d+)\b",
+            text,
+        )
+        if drv_match:
+            cand = drv_match.group(1).strip()
+            if cand not in ("car", "bike", "auto", "me", "ride", "trip", "now", "please", "today"):
+                state.requested_driver = cand.title() if not cand.isdigit() else cand
+                ride.requested_driver = state.requested_driver
+        else:
+            from backend.db.seed import SAMPLE_DRIVERS
+            for sd in SAMPLE_DRIVERS:
+                s_name = sd["name"].lower()
+                first_name = s_name.split()[0]
+                if s_name in text or (len(first_name) >= 4 and re.search(rf"\b{first_name}\b", text)):
+                    state.requested_driver = sd["name"]
+                    ride.requested_driver = sd["name"]
+                    if not state.vehicle_type:
+                        state.vehicle_type = sd["type"]
+                        ride.vehicle_type = sd["type"]
+                    break
+
+        if state.requested_driver:
+            try:
+                db_session = SessionLocal()
+                req = state.requested_driver.strip()
+                target_d = None
+                if req.isdigit():
+                    target_d = db_session.query(Driver).filter(Driver.id == int(req)).first()
+                else:
+                    target_d = (
+                        db_session.query(Driver).filter(Driver.name.ilike(req)).first()
+                        or db_session.query(Driver).filter(Driver.name.ilike(f"%{req}%")).first()
+                    )
+                if target_d:
+                    state.requested_driver = target_d.name
+                    ride.requested_driver = target_d.name
+                    ride.driver_id = target_d.id
+                    if not state.vehicle_type:
+                        state.vehicle_type = target_d.vehicle_type
+                        ride.vehicle_type = target_d.vehicle_type
+                db_session.close()
+            except Exception:
+                pass
+
         if not is_greeting_or_intent and not dest_match and not pickup_match and not from_match:
             formatted_ans = " ".join(w.capitalize() for w in clean_ans.split())
-            if asking_for_dest or (state.pickup and not state.destination):
+            if asking_for_dest:
                 state.destination = formatted_ans
-            elif asking_for_pickup or not state.pickup:
+            elif asking_for_pickup:
                 state.pickup = formatted_ans
+            elif not state.pickup:
+                state.pickup = formatted_ans
+            elif not state.destination:
+                state.destination = formatted_ans
 
         # Synchronize ride with extracted state
         if state.pickup:
@@ -229,6 +290,8 @@ class ConversationHandler:
             ride.passenger_count = state.passenger_count
         if state.scheduled_time:
             ride.scheduled_time = state.scheduled_time
+        if state.requested_driver:
+            ride.requested_driver = state.requested_driver
 
     def process_turn(
         self,
@@ -299,6 +362,7 @@ class ConversationHandler:
                     "passenger_count": state.passenger_count or 1,
                     "scheduled_time": state.scheduled_time or "Immediate",
                     "booking_for_self": bool(state.booking_for_self),
+                    "requested_driver": state.requested_driver,
                 },
                 "ride_id": state.active_ride_id,
                 "employee": {
@@ -350,6 +414,7 @@ class ConversationHandler:
                     "passenger_count": state.passenger_count or 1,
                     "scheduled_time": state.scheduled_time or "Immediate",
                     "booking_for_self": bool(state.booking_for_self),
+                    "requested_driver": state.requested_driver,
                 },
             }
 
@@ -367,6 +432,7 @@ class ConversationHandler:
                     "passenger_count": state.passenger_count or 1,
                     "scheduled_time": state.scheduled_time or "Immediate",
                     "booking_for_self": bool(state.booking_for_self),
+                    "requested_driver": state.requested_driver,
                 },
             }
 
@@ -400,7 +466,10 @@ class ConversationHandler:
                         "pickup": state.pickup,
                         "destination": state.destination,
                         "vehicle_type": state.vehicle_type,
+                        "passenger_count": state.passenger_count or 1,
+                        "scheduled_time": state.scheduled_time or "Immediate",
                         "booking_for_self": bool(state.booking_for_self),
+                        "requested_driver": state.requested_driver,
                     },
                 }
 
@@ -445,6 +514,10 @@ class ConversationHandler:
                             "pickup": state.pickup,
                             "destination": state.destination,
                             "vehicle_type": state.vehicle_type,
+                            "passenger_count": state.passenger_count or 1,
+                            "scheduled_time": state.scheduled_time or "Immediate",
+                            "booking_for_self": bool(state.booking_for_self),
+                            "requested_driver": state.requested_driver,
                         },
                     }
 
@@ -492,21 +565,34 @@ class ConversationHandler:
                                     "pickup": state.pickup,
                                     "destination": state.destination,
                                     "vehicle_type": state.vehicle_type,
+                                    "passenger_count": state.passenger_count or 1,
+                                    "scheduled_time": state.scheduled_time or "Immediate",
+                                    "booking_for_self": bool(state.booking_for_self),
+                                    "requested_driver": state.requested_driver,
                                 },
                             }
 
                             # Tool 1: check driver availability
-                            yield {"type": "tool_start", "name": "check_driver_availability", "arguments": {"vehicle_type": state.vehicle_type, "pickup_lat": ride.pickup_lat, "pickup_lng": ride.pickup_lng}}
+                            driver_check_args = {
+                                "vehicle_type": state.vehicle_type,
+                                "pickup_lat": ride.pickup_lat,
+                                "pickup_lng": ride.pickup_lng,
+                                "exclude_driver_ids": [],
+                            }
+                            if ride.driver_id:
+                                driver_check_args["driver_id"] = ride.driver_id
+                            elif state.requested_driver:
+                                if state.requested_driver.strip().isdigit():
+                                    driver_check_args["driver_id"] = int(state.requested_driver.strip())
+                                else:
+                                    driver_check_args["driver_name"] = state.requested_driver
+
+                            yield {"type": "tool_start", "name": "check_driver_availability", "arguments": driver_check_args}
                             driver_check = mcp_server.execute_tool(
                                 "check_driver_availability",
-                                {
-                                    "vehicle_type": state.vehicle_type,
-                                    "pickup_lat": ride.pickup_lat,
-                                    "pickup_lng": ride.pickup_lng,
-                                    "exclude_driver_ids": [],
-                                },
+                                driver_check_args,
                             )
-                            tools_called_this_turn.append({"name": "check_driver_availability", "arguments": {"vehicle_type": state.vehicle_type}, "result": driver_check})
+                            tools_called_this_turn.append({"name": "check_driver_availability", "arguments": driver_check_args, "result": driver_check})
                             yield {"type": "tool_end", "name": "check_driver_availability", "result": driver_check}
 
                             if not driver_check.get("found"):
@@ -533,6 +619,8 @@ class ConversationHandler:
 
                                 # Tool 3: assign driver
                                 assigned_driver_id = driver_check["driver_id"]
+                                ride.driver_id = assigned_driver_id
+                                db.commit()
                                 yield {"type": "tool_start", "name": "assign_driver", "arguments": {"ride_id": ride.id, "driver_id": assigned_driver_id}}
                                 assign_result = mcp_server.execute_tool("assign_driver", {"ride_id": ride.id, "driver_id": assigned_driver_id})
                                 tools_called_this_turn.append({"name": "assign_driver", "arguments": {"ride_id": ride.id, "driver_id": assigned_driver_id}, "result": assign_result})
@@ -610,7 +698,10 @@ class ConversationHandler:
                     "pickup": state.pickup,
                     "destination": state.destination,
                     "vehicle_type": state.vehicle_type,
+                    "passenger_count": state.passenger_count or 1,
+                    "scheduled_time": state.scheduled_time or "Immediate",
                     "booking_for_self": bool(state.booking_for_self),
+                    "requested_driver": state.requested_driver,
                 },
                 "ride_id": state.active_ride_id,
                 "mcp_tools_called": tools_called_this_turn,
@@ -632,6 +723,21 @@ class ConversationHandler:
         from openai import OpenAI
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
+        pickup_coords = f"lat={ride.pickup_lat}, lng={ride.pickup_lng}" if ride.pickup_lat is not None and ride.pickup_lng is not None else "Unverified"
+        dest_coords = f"lat={ride.destination_lat}, lng={ride.destination_lng}" if ride.destination_lat is not None and ride.destination_lng is not None else "Unverified"
+        fare_text = f"₹{round(ride.fare_estimate, 2)}" if ride.fare_estimate else "Not calculated yet"
+        
+        matched_driver_text = "None matched yet (call check_driver_availability)"
+        if ride.driver_id:
+            d = db.query(Driver).filter(Driver.id == ride.driver_id).first()
+            if d:
+                matched_driver_text = (
+                    f"{d.name} (ID: {d.id}, Vehicle: {d.vehicle_type.upper()} {d.vehicle_number}, "
+                    f"Phone: {d.phone_number})"
+                )
+        elif state.requested_driver:
+            matched_driver_text = f"User requested driver: '{state.requested_driver}' (verify availability using check_driver_availability with driver_name='{state.requested_driver}')"
+
         system_message = {
             "role": "system",
             "content": (
@@ -640,7 +746,15 @@ class ConversationHandler:
                 f"- Employee ID: {employee.id}\n"
                 f"- Active Ride ID: {ride.id}\n"
                 f"- Current Stage: {state.stage}\n"
-                f"- Filled Slots: pickup='{state.pickup}', destination='{state.destination}', vehicle_type='{state.vehicle_type}'"
+                f"- Verified Pickup: '{state.pickup or ride.pickup_address or 'Pending'}' (Coordinates: {pickup_coords})\n"
+                f"- Verified Destination: '{state.destination or ride.destination_address or 'Pending'}' (Coordinates: {dest_coords})\n"
+                f"- Selected Vehicle Type: '{state.vehicle_type or ride.vehicle_type or 'car'}'\n"
+                f"- Passenger Count: {state.passenger_count or ride.passenger_count or 1}\n"
+                f"- Scheduled Travel Time: '{state.scheduled_time or ride.scheduled_time or 'Immediate'}'\n"
+                f"- Requested Driver: '{state.requested_driver or 'None'}'\n"
+                f"- Calculated Fare: {fare_text}\n"
+                f"- Matched/Proposed Driver: {matched_driver_text}\n"
+                f"CRITICAL INSTRUCTION: When confirming a ride, ALWAYS use the exact Matched/Proposed Driver above! Call assign_driver directly with driver_id={ride.driver_id or 'the matched ID'}. Do NOT re-query check_driver_availability or switch to a different driver upon confirmation."
             ),
         }
 
@@ -699,11 +813,81 @@ class ConversationHandler:
                 except Exception:
                     args = {}
 
-                if name in ("assign_driver", "reassign_driver") and "ride_id" not in args:
-                    args["ride_id"] = ride.id
-                if name == "notify_user_and_driver":
+                # Guarantee coordinates and ride grounding
+                if name == "check_driver_availability":
+                    if ride.pickup_lat is not None and ride.pickup_lng is not None:
+                        if (
+                            "pickup_lat" not in args
+                            or "pickup_lng" not in args
+                            or (
+                                args.get("pickup_lat") == settings.COMPANY_LAT
+                                and args.get("pickup_lng") == settings.COMPANY_LNG
+                                and (ride.pickup_lat != settings.COMPANY_LAT or ride.pickup_lng != settings.COMPANY_LNG)
+                            )
+                        ):
+                            args["pickup_lat"] = ride.pickup_lat
+                            args["pickup_lng"] = ride.pickup_lng
+                    if "vehicle_type" not in args and (state.vehicle_type or ride.vehicle_type):
+                        args["vehicle_type"] = state.vehicle_type or ride.vehicle_type or "car"
+                    if "driver_id" not in args and "driver_name" not in args:
+                        if ride.driver_id:
+                            args["driver_id"] = ride.driver_id
+                        elif state.requested_driver:
+                            if state.requested_driver.strip().isdigit():
+                                args["driver_id"] = int(state.requested_driver.strip())
+                            else:
+                                args["driver_name"] = state.requested_driver
+
+                elif name == "calculate_fare":
+                    if ride.pickup_lat is not None and ride.pickup_lng is not None:
+                        if (
+                            "pickup_lat" not in args
+                            or "pickup_lng" not in args
+                            or (
+                                args.get("pickup_lat") == settings.COMPANY_LAT
+                                and args.get("pickup_lng") == settings.COMPANY_LNG
+                                and (ride.pickup_lat != settings.COMPANY_LAT or ride.pickup_lng != settings.COMPANY_LNG)
+                            )
+                        ):
+                            args["pickup_lat"] = ride.pickup_lat
+                            args["pickup_lng"] = ride.pickup_lng
+                    if ride.destination_lat is not None and ride.destination_lng is not None:
+                        if (
+                            "destination_lat" not in args
+                            or "destination_lng" not in args
+                            or (
+                                args.get("destination_lat") == settings.COMPANY_LAT
+                                and args.get("destination_lng") == settings.COMPANY_LNG
+                                and (ride.destination_lat != settings.COMPANY_LAT or ride.destination_lng != settings.COMPANY_LNG)
+                            )
+                        ):
+                            args["destination_lat"] = ride.destination_lat
+                            args["destination_lng"] = ride.destination_lng
+                    if "vehicle_type" not in args and (state.vehicle_type or ride.vehicle_type):
+                        args["vehicle_type"] = state.vehicle_type or ride.vehicle_type or "car"
+
+                elif name == "assign_driver":
+                    if "ride_id" not in args:
+                        args["ride_id"] = ride.id
+                    # Enforce locked-in driver: if ride already has a driver_id matched from check_driver_availability,
+                    # guarantee that exact driver is assigned!
+                    if ride.driver_id:
+                        args["driver_id"] = ride.driver_id
+                    elif "driver_id" not in args or not args["driver_id"]:
+                        if state.requested_driver and state.requested_driver.strip().isdigit():
+                            args["driver_id"] = int(state.requested_driver.strip())
+
+                elif name == "reassign_driver":
+                    if "ride_id" not in args:
+                        args["ride_id"] = ride.id
+                    if ("rejected_driver_id" not in args or not args["rejected_driver_id"]) and ride.driver_id:
+                        args["rejected_driver_id"] = ride.driver_id
+
+                elif name == "notify_user_and_driver":
                     args.setdefault("ride_id", ride.id)
                     args.setdefault("employee_id", employee.id)
+                    if ("driver_id" not in args or not args["driver_id"]) and ride.driver_id:
+                        args["driver_id"] = ride.driver_id
 
                 tool_result = mcp_client.execute_tool_call(name, args)
                 tools_called_this_turn.append({"name": name, "arguments": args, "result": tool_result})
@@ -723,6 +907,13 @@ class ConversationHandler:
                             ride.destination_lng = tool_result.get("lng")
                         db.commit()
 
+                elif name == "check_driver_availability":
+                    if tool_result.get("found"):
+                        matched_id = tool_result.get("driver_id")
+                        if not ride.driver_id or ride.status != "confirmed":
+                            ride.driver_id = matched_id
+                            db.commit()
+
                 elif name == "calculate_fare":
                     if "fare" in tool_result:
                         ride.fare_estimate = tool_result["fare"]
@@ -740,10 +931,18 @@ class ConversationHandler:
                     if tool_result.get("success"):
                         state.stage = "confirmed"
                         ride.status = "confirmed"
+                        if "new_driver" in tool_result and isinstance(tool_result["new_driver"], dict) and "driver_id" in tool_result["new_driver"]:
+                            ride.driver_id = tool_result["new_driver"]["driver_id"]
                         db.commit()
                     elif tool_result.get("status") == "failed_no_driver":
                         state.stage = "failed"
                         ride.status = "failed_no_driver"
+                        db.commit()
+
+                elif name == "notify_user_and_driver":
+                    if tool_result.get("driver_notified") or tool_result.get("employee_notified"):
+                        state.stage = "confirmed"
+                        ride.status = "confirmed"
                         db.commit()
 
                 openai_messages.append({
@@ -840,22 +1039,27 @@ class ConversationHandler:
         db.commit()
 
         # Step 4.1: Check driver availability
+        driver_check_payload = {
+            "vehicle_type": state.vehicle_type,
+            "pickup_lat": ride.pickup_lat,
+            "pickup_lng": ride.pickup_lng,
+            "exclude_driver_ids": [],
+        }
+        if ride.driver_id:
+            driver_check_payload["driver_id"] = ride.driver_id
+        elif state.requested_driver:
+            if state.requested_driver.strip().isdigit():
+                driver_check_payload["driver_id"] = int(state.requested_driver.strip())
+            else:
+                driver_check_payload["driver_name"] = state.requested_driver
+
         driver_check = mcp_server.execute_tool(
             "check_driver_availability",
-            {
-                "vehicle_type": state.vehicle_type,
-                "pickup_lat": ride.pickup_lat,
-                "pickup_lng": ride.pickup_lng,
-                "exclude_driver_ids": [],
-            },
+            driver_check_payload,
         )
         tools_called_this_turn.append({
             "name": "check_driver_availability",
-            "arguments": {
-                "vehicle_type": state.vehicle_type,
-                "pickup_lat": ride.pickup_lat,
-                "pickup_lng": ride.pickup_lng,
-            },
+            "arguments": driver_check_payload,
             "result": driver_check,
         })
 
@@ -863,6 +1067,8 @@ class ConversationHandler:
             state.stage = "failed"
             ride.status = "failed_no_driver"
             db.commit()
+            if state.requested_driver:
+                return f"Driver {state.requested_driver} is not available right now. Would you like to book another available driver or change vehicle type?"
             return f"I checked for available {state.vehicle_type} drivers near {state.pickup}, but none are available right now. Would you like to try a different vehicle type?"
 
         # Step 4.2: Calculate fare
@@ -892,6 +1098,8 @@ class ConversationHandler:
 
         # Step 4.3: Assign Driver
         assigned_driver_id = driver_check["driver_id"]
+        ride.driver_id = assigned_driver_id
+        db.commit()
         assign_result = mcp_server.execute_tool(
             "assign_driver",
             {"ride_id": ride.id, "driver_id": assigned_driver_id},

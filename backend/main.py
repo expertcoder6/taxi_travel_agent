@@ -12,6 +12,19 @@ from backend.api.routes import router as api_router
 async def lifespan(app: FastAPI):
     # Startup: ensure tables exist
     init_db()
+    # Auto-seed if database is freshly created on a new deployment
+    try:
+        from backend.db.database import SessionLocal
+        from backend.db.models import Driver
+        from backend.db.seed import seed_database
+        db = SessionLocal()
+        try:
+            if db.query(Driver).count() == 0:
+                seed_database()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Startup seed notice: {e}")
     yield
     # Shutdown
 

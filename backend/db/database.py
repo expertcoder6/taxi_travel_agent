@@ -19,8 +19,10 @@ def init_db():
         for table, col, col_type in [
             ("rides", "passenger_count", "INTEGER DEFAULT 1"),
             ("rides", "scheduled_time", "VARCHAR(100) DEFAULT 'Immediate'"),
+            ("rides", "requested_driver", "VARCHAR(100)"),
             ("conversation_state", "passenger_count", "INTEGER DEFAULT 1"),
             ("conversation_state", "scheduled_time", "VARCHAR(100) DEFAULT 'Immediate'"),
+            ("conversation_state", "requested_driver", "VARCHAR(100)"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))

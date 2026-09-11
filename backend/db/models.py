@@ -85,6 +85,7 @@ class Ride(Base):
     vehicle_type = Column(String(20), nullable=True)
     passenger_count = Column(Integer, default=1)
     scheduled_time = Column(String(100), default="Immediate")
+    requested_driver = Column(String(100), nullable=True)
     fare_estimate = Column(Float, nullable=True)
     status = Column(String(30), default="pending")
     channel = Column(String(20), nullable=True)
@@ -112,6 +113,7 @@ class Ride(Base):
             "driver_name": self.driver.name if self.driver else None,
             "driver_phone": self.driver.phone_number if self.driver else None,
             "vehicle_number": self.driver.vehicle_number if self.driver else None,
+            "requested_driver": self.requested_driver,
             "pickup_address": self.pickup_address,
             "pickup_lat": self.pickup_lat,
             "pickup_lng": self.pickup_lng,
@@ -140,6 +142,7 @@ class ConversationState(Base):
     vehicle_type = Column(String(20), nullable=True)
     passenger_count = Column(Integer, default=1)
     scheduled_time = Column(String(100), default="Immediate")
+    requested_driver = Column(String(100), nullable=True)
     booking_for_self = Column(Integer, default=1)
     stage = Column(String(30), default="gathering")
     active_ride_id = Column(Integer, nullable=True)
@@ -164,6 +167,7 @@ class ConversationState(Base):
             "vehicle_type": self.vehicle_type,
             "passenger_count": self.passenger_count or 1,
             "scheduled_time": self.scheduled_time or "Immediate",
+            "requested_driver": self.requested_driver,
             "booking_for_self": bool(self.booking_for_self),
             "stage": self.stage,
             "active_ride_id": self.active_ride_id,

@@ -9,13 +9,15 @@ def check_driver_availability(
     vehicle_type: str,
     pickup_lat: float,
     pickup_lng: float,
+    driver_id: Optional[int] = None,
+    driver_name: Optional[str] = None,
     exclude_driver_ids: Optional[List[int]] = None,
     db: Optional[Session] = None,
 ) -> Dict[str, Any]:
     """
     MCP Tool: check_driver_availability
-    Searches for the nearest available driver matching the requested vehicle type,
-    excluding previously declined or unavailable drivers.
+    Searches for the requested driver (by ID or name) or the nearest available driver
+    matching the vehicle type, excluding previously declined or unavailable drivers.
     """
     should_close = False
     if db is None:
@@ -29,6 +31,75 @@ def check_driver_availability(
 
         exclude_ids = exclude_driver_ids or []
 
+        # 1. If a specific driver is requested by ID or name
+        target_driver = None
+        if driver_id:
+            target_driver = db.query(Driver).filter(Driver.id == driver_id).first()
+        elif driver_name and driver_name.strip():
+            clean_name = driver_name.strip()
+            # Try exact/case-insensitive match first, then substring
+            target_driver = (
+                db.query(Driver).filter(Driver.name.ilike(clean_name)).first()
+                or db.query(Driver).filter(Driver.name.ilike(f"%{clean_name}%")).first()
+            )
+
+        if driver_id or driver_name:
+            if not target_driver:
+                return {
+                    "found": False,
+                    "driver_id": driver_id,
+                    "name": driver_name,
+                    "driver_name": driver_name,
+                    "phone_number": None,
+                    "vehicle_number": None,
+                    "vehicle_type": vehicle,
+                    "rating": None,
+                    "distance_km": None,
+                    "eta_minutes": None,
+                    "message": f"Driver '{driver_name or driver_id}' not found.",
+                }
+
+            if target_driver.availability_status != "available":
+                status_desc = target_driver.availability_status.replace("_", " ")
+                return {
+                    "found": False,
+                    "driver_id": target_driver.id,
+                    "name": target_driver.name,
+                    "driver_name": target_driver.name,
+                    "phone_number": target_driver.phone_number,
+                    "vehicle_number": target_driver.vehicle_number,
+                    "vehicle_type": target_driver.vehicle_type,
+                    "rating": target_driver.rating or 4.8,
+                    "distance_km": None,
+                    "eta_minutes": None,
+                    "message": (
+                        f"Requested driver {target_driver.name} is currently {status_desc}. "
+                        f"Would you like to select another driver or find the nearest available {target_driver.vehicle_type} driver?"
+                    ),
+                }
+
+            # Requested driver is available
+            d_lat = target_driver.current_lat or settings.COMPANY_LAT
+            d_lng = target_driver.current_lng or settings.COMPANY_LNG
+            dist = haversine_distance(pickup_lat, pickup_lng, d_lat, d_lng)
+            road_dist = round(dist * 1.3, 2)
+            eta_minutes = max(3, int(round(road_dist * 2.5)))
+
+            return {
+                "found": True,
+                "driver_id": target_driver.id,
+                "name": target_driver.name,
+                "driver_name": target_driver.name,
+                "phone_number": target_driver.phone_number,
+                "vehicle_number": target_driver.vehicle_number,
+                "vehicle_type": target_driver.vehicle_type,
+                "rating": target_driver.rating or 4.8,
+                "distance_km": road_dist,
+                "eta_minutes": eta_minutes,
+                "message": f"Requested driver {target_driver.name} is available and {eta_minutes} mins away ({road_dist} km).",
+            }
+
+        # 2. General proximity search
         query = db.query(Driver).filter(
             Driver.vehicle_type == vehicle,
             Driver.availability_status == "available",
@@ -44,6 +115,7 @@ def check_driver_availability(
                 "found": False,
                 "driver_id": None,
                 "name": None,
+                "driver_name": None,
                 "phone_number": None,
                 "vehicle_number": None,
                 "vehicle_type": vehicle,
@@ -72,6 +144,7 @@ def check_driver_availability(
             "found": True,
             "driver_id": nearest_driver.id,
             "name": nearest_driver.name,
+            "driver_name": nearest_driver.name,
             "phone_number": nearest_driver.phone_number,
             "vehicle_number": nearest_driver.vehicle_number,
             "vehicle_type": nearest_driver.vehicle_type,

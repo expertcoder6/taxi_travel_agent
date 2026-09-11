@@ -1112,9 +1112,42 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <span className={`badge badge-${driver.availability_status}`}>
-                    {driver.availability_status.replace("_", " ")}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span className={`badge badge-${driver.availability_status}`}>
+                      {driver.availability_status.replace("_", " ")}
+                    </span>
+                    {driver.availability_status === "available" && (
+                      <button
+                        onClick={() => {
+                          setActiveTab("simulator");
+                          const prompt = `Book with driver ${driver.name} from Acme Tech Park to Koramangala`;
+                          if (simChannel === "message") {
+                            handleSendMessage(prompt);
+                          } else {
+                            handleVoiceTurn(prompt);
+                          }
+                        }}
+                        style={{
+                          background: "linear-gradient(135deg, #6366f1, #3b82f6)",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "5px 10px",
+                          color: "#ffffff",
+                          fontSize: "0.72rem",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          whiteSpace: "nowrap",
+                          boxShadow: "0 2px 8px rgba(99, 102, 241, 0.35)",
+                        }}
+                        title={`Book a ride directly requesting ${driver.name}`}
+                      >
+                        Book Driver
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1634,6 +1667,12 @@ export default function DashboardPage() {
                     {currentSlots.vehicle_type || "Pending"}
                   </strong>
                 </div>
+                <div>
+                  <span style={{ color: "var(--text-dim)" }}>Driver: </span>
+                  <strong style={{ color: currentSlots.requested_driver ? "#f59e0b" : "#64748b" }}>
+                    {currentSlots.requested_driver || "Nearest Available"}
+                  </strong>
+                </div>
 
                 {/* Geolocation Button in Sidebar */}
                 <button
@@ -1671,6 +1710,8 @@ export default function DashboardPage() {
               </span>
               <div style={{ display: "grid", gap: "6px" }}>
                 {[
+                  "Book with driver Rajesh Kumar from Acme Tech Park to Koramangala",
+                  "Need a car with driver Suresh to Indiranagar",
                   "Pickup at Acme Tech Park, where i have to reach is Koramangala",
                   "Need a car from Acme Tech Park to Koramangala",
                   "Where i have to reach is Whitefield by bike",

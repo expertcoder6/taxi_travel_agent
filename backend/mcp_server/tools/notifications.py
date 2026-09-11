@@ -191,6 +191,13 @@ def notify_user_and_driver(
         return {
             "employee_notified": True,
             "driver_notified": True,
+            "assigned_driver": {
+                "driver_id": driver.id if driver else driver_id,
+                "driver_name": drv_name,
+                "driver_phone": drv_phone,
+                "vehicle_number": veh_num,
+                "vehicle_type": veh_type,
+            },
             "customer_sms": sms_result,
             "employee_message": employee_msg,
             "driver_message": driver_msg,
