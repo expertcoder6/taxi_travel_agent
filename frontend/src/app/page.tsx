@@ -662,102 +662,105 @@ export default function DashboardPage() {
       <header
         className="glass-card"
         style={{
-          padding: "18px 24px",
-          marginBottom: "24px",
+          padding: "16px 20px",
+          marginBottom: "20px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "16px",
+          gap: "14px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div
             style={{
-              width: "44px",
-              height: "44px",
-              borderRadius: "12px",
-              background: "linear-gradient(135deg, #6366f1, #38bdf8)",
+              width: "40px",
+              height: "40px",
+              borderRadius: "8px",
+              background: "#1e293b",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 4px 15px rgba(99, 102, 241, 0.4)",
             }}
           >
-            <Car size={24} color="#ffffff" />
+            <Car size={20} color="#3b82f6" />
           </div>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <h1 style={{ fontSize: "1.45rem", fontWeight: "700", color: "#f8fafc" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h1 style={{ fontSize: "1.3rem", fontWeight: "700", color: "#f8fafc" }}>
                 Acme Mobility AI
               </h1>
               <span
                 style={{
-                  background: "rgba(99, 102, 241, 0.2)",
-                  color: "#818cf8",
-                  padding: "2px 8px",
-                  borderRadius: "6px",
-                  fontSize: "0.75rem",
+                  background: "rgba(255, 255, 255, 0.06)",
+                  color: "#94a3b8",
+                  padding: "2px 7px",
+                  borderRadius: "4px",
+                  fontSize: "0.7rem",
                   fontWeight: "600",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                 }}
               >
                 MCP PROTOCOL
               </span>
             </div>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }}>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "2px" }}>
               Autonomous Corporate Transportation • Voice Call & SMS Intake • Live Dispatch
             </p>
           </div>
         </div>
 
         {/* Live Status & Overview Stats */}
-        <div style={{ display: "flex", alignItems: "center", gap: "18px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              background: "rgba(16, 185, 129, 0.1)",
-              padding: "6px 14px",
+              gap: "7px",
+              background: "rgba(34, 197, 94, 0.08)",
+              padding: "5px 12px",
               borderRadius: "20px",
-              border: "1px solid rgba(16, 185, 129, 0.25)",
+              border: "1px solid rgba(34, 197, 94, 0.2)",
             }}
           >
             <div className="live-pulse" />
-            <span style={{ fontSize: "0.8rem", color: "#34d399", fontWeight: "600" }}>
-              DISPATCH PIPELINE ACTIVE
+            <span style={{ fontSize: "0.75rem", color: "#4ade80", fontWeight: "600" }}>
+              SYSTEM ONLINE
             </span>
           </div>
 
-          <div style={{ display: "flex", gap: "12px" }}>
+          <div style={{ display: "flex", gap: "8px" }}>
             <div
               style={{
-                background: "rgba(255, 255, 255, 0.04)",
-                padding: "6px 14px",
-                borderRadius: "8px",
+                background: "#0f172a",
+                border: "1px solid var(--border-color)",
+                padding: "5px 12px",
+                borderRadius: "6px",
                 textAlign: "center",
               }}
             >
-              <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", display: "block" }}>
+              <span style={{ fontSize: "0.68rem", color: "var(--text-dim)", display: "block" }}>
                 Available Fleet
               </span>
-              <strong style={{ fontSize: "1rem", color: "#38bdf8" }}>
+              <strong style={{ fontSize: "0.92rem", color: "#f8fafc" }}>
                 {stats?.drivers?.available ?? 0} / {stats?.drivers?.total ?? 0}
               </strong>
             </div>
 
             <div
               style={{
-                background: "rgba(255, 255, 255, 0.04)",
-                padding: "6px 14px",
-                borderRadius: "8px",
+                background: "#0f172a",
+                border: "1px solid var(--border-color)",
+                padding: "5px 12px",
+                borderRadius: "6px",
                 textAlign: "center",
               }}
             >
-              <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", display: "block" }}>
+              <span style={{ fontSize: "0.68rem", color: "var(--text-dim)", display: "block" }}>
                 Active Trips
               </span>
-              <strong style={{ fontSize: "1rem", color: "#fbbf24" }}>
+              <strong style={{ fontSize: "0.92rem", color: "#f8fafc" }}>
                 {stats?.rides?.active ?? 0}
               </strong>
             </div>
@@ -788,50 +791,49 @@ export default function DashboardPage() {
       <div
         className="glass-card"
         style={{
-          background: "linear-gradient(135deg, rgba(30, 27, 75, 0.7), rgba(15, 23, 42, 0.85))",
-          border: "1px solid rgba(99, 102, 241, 0.4)",
-          borderRadius: "14px",
-          padding: "18px 24px",
-          marginBottom: "24px",
+          background: "#111827",
+          border: "1px solid var(--border-color)",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "18px",
-          boxShadow: "0 8px 30px rgba(0, 0, 0, 0.4)",
+          gap: "16px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <div
             style={{
-              width: "50px",
-              height: "50px",
-              borderRadius: "14px",
-              background: "linear-gradient(135deg, #10b981, #06b6d4)",
+              width: "40px",
+              height: "40px",
+              borderRadius: "8px",
+              background: "#1e293b",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 0 25px rgba(16, 185, 129, 0.45)",
             }}
           >
-            <PhoneCall size={26} color="#ffffff" />
+            <PhoneCall size={20} color="#3b82f6" />
           </div>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.82rem", color: "#a5b4fc", fontWeight: "700", letterSpacing: "0.05em" }}>
-                LIVE TWILIO AGENT NUMBER:
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.74rem", color: "var(--text-dim)", fontWeight: "600", letterSpacing: "0.04em" }}>
+                LIVE TWILIO HOTLINE:
               </span>
               <a
                 href={`tel:${stats?.twilio_phone_number || "+12762089447"}`}
                 style={{
-                  fontSize: "1.45rem",
-                  fontWeight: "800",
-                  color: "#38bdf8",
-                  letterSpacing: "0.04em",
+                  fontSize: "1.2rem",
+                  fontWeight: "700",
+                  color: "#f8fafc",
+                  letterSpacing: "0.03em",
                   textDecoration: "none",
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px",
+                  gap: "6px",
                   fontFamily: "monospace",
                 }}
               >
@@ -839,50 +841,48 @@ export default function DashboardPage() {
               </a>
               <span
                 style={{
-                  background: "rgba(16, 185, 129, 0.15)",
-                  color: "#34d399",
-                  border: "1px solid rgba(16, 185, 129, 0.35)",
-                  padding: "4px 10px",
-                  borderRadius: "20px",
-                  fontSize: "0.75rem",
-                  fontWeight: "700",
+                  background: "rgba(34, 197, 94, 0.08)",
+                  color: "#4ade80",
+                  border: "1px solid rgba(34, 197, 94, 0.2)",
+                  padding: "3px 8px",
+                  borderRadius: "12px",
+                  fontSize: "0.7rem",
+                  fontWeight: "600",
                   display: "flex",
                   alignItems: "center",
-                  gap: "6px",
+                  gap: "5px",
                 }}
               >
-                <span className="live-pulse" style={{ width: "8px", height: "8px", backgroundColor: "#34d399" }} />
-                VOICE & SMS LIVE
+                <span className="live-pulse" />
+                VOICE & SMS READY
               </span>
             </div>
-            <p style={{ fontSize: "0.85rem", color: "#cbd5e1", marginTop: "6px", lineHeight: "1.4" }}>
-              Call this number from your phone to talk directly with the AI Voice Agent (Amazon Polly Neural Voice + Groq Whisper + MCP Tools).
-              Say your <strong>pickup location</strong>, <strong>destination</strong>, and <strong>vehicle type (car/bike/auto)</strong>. As soon as you confirm, the ride automatically pops up in the board below within 4 seconds!
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px", lineHeight: "1.4" }}>
+              Call from your phone to talk directly with the AI Voice Agent. State your <strong>pickup</strong>, <strong>destination</strong>, and <strong>vehicle</strong>.
             </p>
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: "320px", maxWidth: "420px", flex: "1 1 320px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: "300px", maxWidth: "380px", flex: "1 1 300px" }}>
           {/* Quick Call Phone Widget */}
           <div
             style={{
-              background: "rgba(15, 23, 42, 0.75)",
-              border: "1px solid rgba(16, 185, 129, 0.4)",
-              borderRadius: "10px",
-              padding: "12px 16px",
-              boxShadow: "0 4px 15px rgba(0,0,0,0.3)",
+              background: "#0f172a",
+              border: "1px solid var(--border-color)",
+              borderRadius: "8px",
+              padding: "10px 14px",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "#34d399", letterSpacing: "0.03em" }}>
-                DIRECT CALL TO YOUR PHONE (FREE)
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+              <span style={{ fontSize: "0.74rem", fontWeight: "600", color: "var(--text-main)", letterSpacing: "0.02em" }}>
+                DIRECT CALL TO PHONE
               </span>
-              <span style={{ fontSize: "0.7rem", color: "#94a3b8", background: "rgba(255,255,255,0.06)", padding: "2px 6px", borderRadius: "4px" }}>
-                Zero ISD Needed
+              <span style={{ fontSize: "0.68rem", color: "var(--text-dim)" }}>
+                Zero Toll
               </span>
             </div>
 
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
               <input
                 type="text"
                 value={outboundPhone}
@@ -890,46 +890,39 @@ export default function DashboardPage() {
                 placeholder="+91..."
                 style={{
                   flex: 1,
-                  background: "rgba(0,0,0,0.4)",
-                  border: "1px solid rgba(99, 102, 241, 0.3)",
+                  background: "#1e293b",
+                  border: "1px solid var(--border-color)",
                   borderRadius: "6px",
                   padding: "6px 10px",
-                  fontSize: "0.85rem",
+                  fontSize: "0.82rem",
                   color: "#f8fafc",
                   fontFamily: "monospace",
+                  outline: "none",
                 }}
               />
               <button
                 onClick={handleTriggerOutboundCall}
                 disabled={outboundLoading || !outboundPhone.trim()}
+                className="btn btn-primary"
                 style={{
-                  background: outboundLoading ? "#475569" : "linear-gradient(135deg, #10b981, #059669)",
-                  border: "none",
-                  borderRadius: "6px",
-                  padding: "7px 14px",
-                  color: "#ffffff",
-                  fontSize: "0.82rem",
-                  fontWeight: "700",
-                  cursor: outboundLoading ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
+                  padding: "6px 12px",
+                  fontSize: "0.78rem",
+                  fontWeight: "600",
                   whiteSpace: "nowrap",
-                  boxShadow: "0 2px 10px rgba(16, 185, 129, 0.4)",
                 }}
               >
-                <PhoneCall size={14} />
-                {outboundLoading ? "Calling..." : "Call My Phone"}
+                <PhoneCall size={13} />
+                {outboundLoading ? "Calling..." : "Call"}
               </button>
             </div>
 
             {outboundStatus && (
               <div
                 style={{
-                  marginTop: "8px",
-                  fontSize: "0.76rem",
-                  color: outboundStatus.startsWith("❌") ? "#f87171" : "#34d399",
-                  background: "rgba(0,0,0,0.25)",
+                  marginTop: "6px",
+                  fontSize: "0.74rem",
+                  color: outboundStatus.startsWith("❌") ? "#f87171" : "#4ade80",
+                  background: "rgba(0,0,0,0.3)",
                   padding: "4px 8px",
                   borderRadius: "4px",
                 }}
@@ -938,11 +931,6 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-
-          <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--text-dim)", flexWrap: "wrap" }}>
-            <span>Inbound format: <code style={{ color: "#38bdf8" }}>+12762089447</code></span>
-            <span>Webhook: <code style={{ color: "#38bdf8" }}>https://acme-ride-agent.loca.lt/voice/inbound</code></span>
-          </div>
         </div>
       </div>
 
@@ -950,37 +938,58 @@ export default function DashboardPage() {
       <div
         style={{
           display: "flex",
-          gap: "10px",
-          marginBottom: "24px",
-          borderBottom: "1px solid var(--border-color)",
-          paddingBottom: "14px",
+          gap: "6px",
+          marginBottom: "20px",
+          background: "#0f172a",
+          border: "1px solid var(--border-color)",
+          borderRadius: "8px",
+          padding: "4px",
+          width: "fit-content",
         }}
       >
         <button
           onClick={() => setActiveTab("fleet")}
-          className={`btn ${activeTab === "fleet" ? "btn-primary" : "btn-secondary"}`}
-          style={{ padding: "10px 20px" }}
+          className="btn"
+          style={{
+            background: activeTab === "fleet" ? "var(--primary)" : "transparent",
+            color: activeTab === "fleet" ? "#ffffff" : "var(--text-muted)",
+            padding: "8px 16px",
+            fontSize: "0.8rem",
+            border: "none",
+          }}
         >
-          <Car size={18} />
-          Fleet & Rides Dispatch
+          <Car size={15} />
+          Fleet & Dispatch
         </button>
 
         <button
           onClick={() => setActiveTab("simulator")}
-          className={`btn ${activeTab === "simulator" ? "btn-primary" : "btn-secondary"}`}
-          style={{ padding: "10px 20px" }}
+          className="btn"
+          style={{
+            background: activeTab === "simulator" ? "var(--primary)" : "transparent",
+            color: activeTab === "simulator" ? "#ffffff" : "var(--text-muted)",
+            padding: "8px 16px",
+            fontSize: "0.8rem",
+            border: "none",
+          }}
         >
-          <PhoneCall size={18} />
-          Interactive Multi-Channel Simulator
+          <PhoneCall size={15} />
+          Channel Simulator
         </button>
 
         <button
           onClick={() => setActiveTab("inspector")}
-          className={`btn ${activeTab === "inspector" ? "btn-primary" : "btn-secondary"}`}
-          style={{ padding: "10px 20px" }}
+          className="btn"
+          style={{
+            background: activeTab === "inspector" ? "var(--primary)" : "transparent",
+            color: activeTab === "inspector" ? "#ffffff" : "var(--text-muted)",
+            padding: "8px 16px",
+            fontSize: "0.8rem",
+            border: "none",
+          }}
         >
-          <Terminal size={18} />
-          MCP Tool Execution Inspector ({mcpLogs.length})
+          <Terminal size={15} />
+          MCP Inspector ({mcpLogs.length})
         </button>
       </div>
 
@@ -1128,19 +1137,18 @@ export default function DashboardPage() {
                           }
                         }}
                         style={{
-                          background: "linear-gradient(135deg, #6366f1, #3b82f6)",
-                          border: "none",
+                          background: "#2563eb",
+                          border: "1px solid rgba(255, 255, 255, 0.12)",
                           borderRadius: "6px",
-                          padding: "5px 10px",
+                          padding: "4px 9px",
                           color: "#ffffff",
                           fontSize: "0.72rem",
-                          fontWeight: "600",
+                          fontWeight: "500",
                           cursor: "pointer",
                           display: "flex",
                           alignItems: "center",
                           gap: "4px",
                           whiteSpace: "nowrap",
-                          boxShadow: "0 2px 8px rgba(99, 102, 241, 0.35)",
                         }}
                         title={`Book a ride directly requesting ${driver.name}`}
                       >
@@ -1651,25 +1659,25 @@ export default function DashboardPage() {
               <div style={{ display: "grid", gap: "6px", fontSize: "0.8rem" }}>
                 <div>
                   <span style={{ color: "var(--text-dim)" }}>Pickup: </span>
-                  <strong style={{ color: currentSlots.pickup ? "#38bdf8" : "#64748b" }}>
+                  <strong style={{ color: currentSlots.pickup ? "#f8fafc" : "#64748b" }}>
                     {currentSlots.pickup || "Pending"}
                   </strong>
                 </div>
                 <div>
                   <span style={{ color: "var(--text-dim)" }}>Destination: </span>
-                  <strong style={{ color: currentSlots.destination ? "#a855f7" : "#64748b" }}>
+                  <strong style={{ color: currentSlots.destination ? "#f8fafc" : "#64748b" }}>
                     {currentSlots.destination || "Pending"}
                   </strong>
                 </div>
                 <div>
                   <span style={{ color: "var(--text-dim)" }}>Vehicle: </span>
-                  <strong style={{ color: currentSlots.vehicle_type ? "#34d399" : "#64748b", textTransform: "capitalize" }}>
+                  <strong style={{ color: currentSlots.vehicle_type ? "#f8fafc" : "#64748b", textTransform: "capitalize" }}>
                     {currentSlots.vehicle_type || "Pending"}
                   </strong>
                 </div>
                 <div>
                   <span style={{ color: "var(--text-dim)" }}>Driver: </span>
-                  <strong style={{ color: currentSlots.requested_driver ? "#f59e0b" : "#64748b" }}>
+                  <strong style={{ color: currentSlots.requested_driver ? "#60a5fa" : "#64748b" }}>
                     {currentSlots.requested_driver || "Nearest Available"}
                   </strong>
                 </div>
@@ -1686,12 +1694,12 @@ export default function DashboardPage() {
                     gap: "6px",
                     width: "100%",
                     padding: "7px 10px",
-                    background: "rgba(56, 189, 248, 0.12)",
-                    border: "1px solid rgba(56, 189, 248, 0.35)",
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid var(--border-color)",
                     borderRadius: "6px",
-                    color: "#38bdf8",
+                    color: "#e2e8f0",
                     fontSize: "0.78rem",
-                    fontWeight: "600",
+                    fontWeight: "500",
                     cursor: "pointer",
                     transition: "all 0.15s ease",
                   }}
@@ -1815,21 +1823,21 @@ export default function DashboardPage() {
                       <div
                         style={{
                           maxWidth: "75%",
-                          padding: "12px 16px",
+                          padding: "10px 14px",
                           borderRadius:
                             msg.sender === "user"
-                              ? "14px 14px 2px 14px"
-                              : "14px 14px 14px 2px",
+                              ? "12px 12px 2px 12px"
+                              : "12px 12px 12px 2px",
                           background:
                             msg.sender === "user"
-                              ? "linear-gradient(135deg, #6366f1, #4f46e5)"
-                              : "rgba(255, 255, 255, 0.05)",
+                              ? "#2563eb"
+                              : "#1e293b",
                           border:
                             msg.sender === "user"
                               ? "none"
                               : "1px solid var(--border-color)",
                           color: "#f8fafc",
-                          fontSize: "0.9rem",
+                          fontSize: "0.88rem",
                           whiteSpace: "pre-line",
                           lineHeight: "1.45",
                         }}
